@@ -1,0 +1,1496 @@
+(function () {
+    var workspace = document.querySelector('.wf-workspace');
+    if (workspace) {
+        var workspaceBtn = workspace.querySelector('.wf-workspace-btn');
+        var workspaceMenu = workspace.querySelector('.wf-workspace-menu');
+        if (workspaceBtn && workspaceMenu) {
+            workspaceBtn.addEventListener('click', function (event) {
+                event.stopPropagation();
+                var open = workspaceMenu.hidden;
+                workspaceMenu.hidden = !open;
+                workspaceBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+            document.addEventListener('click', function () {
+                workspaceMenu.hidden = true;
+                workspaceBtn.setAttribute('aria-expanded', 'false');
+            });
+            workspaceMenu.addEventListener('click', function (event) {
+                event.stopPropagation();
+            });
+        }
+    }
+
+    var toggle = document.getElementById('wf-sidebar-toggle');
+    var sidebar = document.getElementById('wf-sidebar');
+    var backdrop = document.getElementById('wf-sidebar-backdrop');
+    var desktopQuery = window.matchMedia('(min-width: 1024px)');
+
+    function isDesktop() {
+        return desktopQuery.matches;
+    }
+
+    function closeDrawer() {
+        if (sidebar) {
+            sidebar.classList.remove('is-open');
+        }
+        document.body.classList.remove('sidebar-open');
+        if (toggle && !isDesktop()) {
+            toggle.setAttribute('aria-label', 'Open menu');
+        }
+    }
+
+    function syncToggleLabel() {
+        if (!toggle) {
+            return;
+        }
+        if (!isDesktop()) {
+            toggle.setAttribute('aria-label', sidebar && sidebar.classList.contains('is-open') ? 'Close menu' : 'Open menu');
+            return;
+        }
+        var collapsed = document.documentElement.getAttribute('data-sidebar') === 'collapsed';
+        toggle.setAttribute('aria-label', collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+    }
+
+    var back = document.getElementById('wf-back');
+    if (back) {
+        back.addEventListener('click', function () {
+            var ref = document.referrer;
+            if (ref) {
+                try {
+                    if (new URL(ref).origin === window.location.origin) {
+                        window.history.back();
+                        return;
+                    }
+                } catch (error) {
+                    /* use the fallback below */
+                }
+            }
+            var crumb = document.querySelector('.wf-breadcrumb a');
+            window.location.href = crumb ? crumb.getAttribute('href') : (document.body.getAttribute('data-home') || '/');
+        });
+    }
+
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function () {
+            if (!isDesktop()) {
+                sidebar.classList.toggle('is-open');
+                document.body.classList.toggle('sidebar-open');
+                syncToggleLabel();
+                return;
+            }
+            var next = document.documentElement.getAttribute('data-sidebar') === 'collapsed' ? 'expanded' : 'collapsed';
+            document.documentElement.setAttribute('data-sidebar', next);
+            try {
+                localStorage.setItem('workflowpro_sidebar', next);
+            } catch (error) {}
+            syncToggleLabel();
+        });
+    }
+
+    if (backdrop) {
+        backdrop.addEventListener('click', closeDrawer);
+    }
+
+    if (sidebar) {
+        sidebar.querySelectorAll('a').forEach(function (link) {
+            link.addEventListener('click', function () {
+                if (!isDesktop()) {
+                    closeDrawer();
+                }
+            });
+        });
+    }
+
+    if (typeof desktopQuery.addEventListener === 'function') {
+        desktopQuery.addEventListener('change', function () {
+            if (isDesktop()) {
+                closeDrawer();
+            }
+            syncToggleLabel();
+        });
+    }
+    syncToggleLabel();
+
+    var tip = document.createElement('div');
+    tip.className = 'wf-tooltip';
+    tip.hidden = true;
+    document.body.appendChild(tip);
+
+    function hideTip() {
+        tip.hidden = true;
+    }
+
+    document.querySelectorAll('.wf-nav-link, .wf-sidebar-profile').forEach(function (el) {
+        el.addEventListener('mouseenter', function () {
+            if (!isDesktop() || document.documentElement.getAttribute('data-sidebar') !== 'collapsed') {
+                return;
+            }
+            var label = el.getAttribute('data-label');
+            if (!label) {
+                return;
+            }
+            var rect = el.getBoundingClientRect();
+            tip.textContent = label;
+            tip.hidden = false;
+            tip.style.top = (rect.top + rect.height / 2) + 'px';
+            tip.style.left = (rect.right + 10) + 'px';
+        });
+        el.addEventListener('mouseleave', hideTip);
+        el.addEventListener('focus', function () {
+            el.dispatchEvent(new Event('mouseenter'));
+        });
+        el.addEventListener('blur', hideTip);
+    });
+
+    function resolvedTheme(theme) {
+        if (theme === 'dark' || theme === 'light') {
+            return theme;
+        }
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+
+    function applyTheme(theme) {
+        var resolved = resolvedTheme(theme);
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.setAttribute('data-resolved', resolved);
+        document.documentElement.setAttribute('data-bs-theme', resolved);
+        try {
+            localStorage.setItem('workflowpro_theme', theme);
+        } catch (error) {}
+        document.querySelectorAll('[data-theme-choice]').forEach(function (button) {
+            var selected = button.getAttribute('data-theme-choice') === theme;
+            button.classList.toggle('active', selected);
+            button.classList.toggle('is-active', selected);
+            if (button.hasAttribute('aria-pressed')) {
+                button.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            }
+        });
+    }
+
+    document.querySelectorAll('[data-theme-choice]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            applyTheme(button.getAttribute('data-theme-choice') || 'system');
+        });
+    });
+    applyTheme(document.documentElement.getAttribute('data-theme') || 'system');
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+        if (document.documentElement.getAttribute('data-theme') === 'system') {
+            applyTheme('system');
+        }
+    });
+
+    var command = document.getElementById('wf-command');
+    var commandInput = document.getElementById('wf-command-input');
+    var commandList = document.getElementById('wf-command-list');
+    var commandIndex = 0;
+
+    function pageItems() {
+        var items = [];
+        document.querySelectorAll('.wf-nav-link').forEach(function (link) {
+            items.push({
+                label: link.getAttribute('data-label') || link.textContent.trim(),
+                href: link.getAttribute('href')
+            });
+        });
+        return items;
+    }
+
+    function renderCommand() {
+        if (!commandList || !commandInput) {
+            return;
+        }
+        var query = commandInput.value.trim().toLowerCase();
+        var rows = pageItems().filter(function (item) {
+            return query === '' || item.label.toLowerCase().indexOf(query) !== -1;
+        });
+        var searches = [
+            { path: '/tasks', label: 'Search tasks' },
+            { path: '/projects', label: 'Search projects' },
+            { path: '/clients', label: 'Search clients' },
+            { path: '/invoices', label: 'Search invoices' }
+        ];
+        if (query !== '') {
+            searches.forEach(function (target) {
+                var match = pageItems().some(function (item) {
+                    return item.href.indexOf(target.path) !== -1;
+                });
+                if (match) {
+                    var base = pageItems().filter(function (item) {
+                        return item.href.indexOf(target.path) !== -1;
+                    })[0];
+                    var join = base.href.indexOf('?') === -1 ? '?' : '&';
+                    rows.unshift({
+                        label: target.label + ' for “' + commandInput.value.trim() + '”',
+                        href: base.href.split('?')[0] + join + 'q=' + encodeURIComponent(commandInput.value.trim())
+                    });
+                }
+            });
+        }
+        commandList.innerHTML = '';
+        if (rows.length === 0) {
+            var empty = document.createElement('p');
+            empty.className = 'wf-command-empty';
+            empty.textContent = 'No matching pages.';
+            commandList.appendChild(empty);
+            return;
+        }
+        commandIndex = 0;
+        rows.forEach(function (row, index) {
+            var li = document.createElement('li');
+            var link = document.createElement('a');
+            link.href = row.href;
+            link.textContent = row.label;
+            if (index === 0) {
+                link.className = 'is-active';
+            }
+            link.addEventListener('mouseenter', function () {
+                commandIndex = index;
+                markCommand();
+            });
+            li.appendChild(link);
+            commandList.appendChild(li);
+        });
+    }
+
+    function markCommand() {
+        if (!commandList) {
+            return;
+        }
+        var links = commandList.querySelectorAll('a');
+        links.forEach(function (link, index) {
+            link.classList.toggle('is-active', index === commandIndex);
+        });
+    }
+
+    function openCommand() {
+        if (!command || !commandInput) {
+            return;
+        }
+        command.hidden = false;
+        commandInput.value = '';
+        renderCommand();
+        commandInput.focus();
+    }
+
+    function closeCommand() {
+        if (command) {
+            command.hidden = true;
+        }
+    }
+
+    var searchOpen = document.getElementById('wf-search-open');
+    if (searchOpen) {
+        searchOpen.addEventListener('click', openCommand);
+    }
+    if (command) {
+        command.addEventListener('click', function (event) {
+            if (event.target === command) {
+                closeCommand();
+            }
+        });
+    }
+    if (commandInput) {
+        commandInput.addEventListener('input', renderCommand);
+        commandInput.addEventListener('keydown', function (event) {
+            var links = commandList ? commandList.querySelectorAll('a') : [];
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                commandIndex = Math.min(commandIndex + 1, links.length - 1);
+                markCommand();
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                commandIndex = Math.max(commandIndex - 1, 0);
+                markCommand();
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                if (links[commandIndex]) {
+                    window.location.href = links[commandIndex].href;
+                }
+            } else if (event.key === 'Escape') {
+                closeCommand();
+            }
+        });
+    }
+    document.addEventListener('keydown', function (event) {
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+            event.preventDefault();
+            if (command && !command.hidden) {
+                closeCommand();
+            } else {
+                openCommand();
+            }
+        } else if (event.key === 'Escape' && command && !command.hidden) {
+            closeCommand();
+        }
+    });
+
+    var confirmRoot = document.getElementById('wf-confirm');
+    var confirmText = document.getElementById('wf-confirm-text');
+    var confirmOk = document.getElementById('wf-confirm-ok');
+    var confirmCancel = document.getElementById('wf-confirm-cancel');
+    var confirmWait = null;
+
+    function closeConfirm(accepted) {
+        if (!confirmRoot || confirmRoot.hidden) {
+            return;
+        }
+        confirmRoot.hidden = true;
+        document.body.classList.remove('wf-confirm-open');
+        var finish = confirmWait;
+        confirmWait = null;
+        if (finish) {
+            finish(accepted);
+        }
+    }
+
+    function confirmTone(message) {
+        var text = String(message || '').toLowerCase();
+        if (text.indexOf('sign out') !== -1) {
+            return 'signout';
+        }
+        if (/delete|remove|archive|cancel|reject|deactivate/.test(text)) {
+            return 'danger';
+        }
+        return 'neutral';
+    }
+
+    function confirmActionLabel(message) {
+        var text = String(message || '').toLowerCase();
+        if (text.indexOf('sign out') !== -1) {
+            return 'Sign out';
+        }
+        if (text.indexOf('delete') !== -1) {
+            return 'Delete';
+        }
+        if (text.indexOf('remove') !== -1) {
+            return 'Remove';
+        }
+        if (text.indexOf('archive') !== -1) {
+            return 'Archive';
+        }
+        if (text.indexOf('deactivate') !== -1) {
+            return 'Deactivate';
+        }
+        if (text.indexOf('reject') !== -1) {
+            return 'Reject';
+        }
+        if (text.indexOf('activate') !== -1 || text.indexOf('restore') !== -1) {
+            return 'Activate';
+        }
+        if (text.indexOf('approve') !== -1) {
+            return 'Approve';
+        }
+        return 'Yes';
+    }
+
+    function askConfirm(message) {
+        if (!confirmRoot || !confirmText || !confirmOk || !confirmCancel) {
+            return Promise.resolve(window.confirm(message));
+        }
+        confirmRoot.setAttribute('data-tone', confirmTone(message));
+        confirmText.textContent = message;
+        var confirmLabel = confirmActionLabel(message);
+        var confirmIcons = {
+            'Sign out': 'box-arrow-right',
+            'Delete': 'trash3',
+            'Remove': 'trash3',
+            'Archive': 'archive',
+            'Deactivate': 'pause-circle',
+            'Reject': 'x-circle',
+            'Activate': 'check-circle',
+            'Approve': 'check-circle',
+            'Yes': 'check-lg'
+        };
+        confirmOk.innerHTML = '<i class="bi bi-' + (confirmIcons[confirmLabel] || 'check-lg') + '" aria-hidden="true"></i> ' + confirmLabel;
+        confirmCancel.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i> Cancel';
+        confirmRoot.hidden = false;
+        document.body.classList.add('wf-confirm-open');
+        confirmCancel.focus();
+        return new Promise(function (resolve) {
+            confirmWait = resolve;
+        });
+    }
+
+    if (confirmRoot) {
+        confirmOk.addEventListener('click', function () {
+            closeConfirm(true);
+        });
+        confirmCancel.addEventListener('click', function () {
+            closeConfirm(false);
+        });
+        confirmRoot.addEventListener('click', function (event) {
+            if (event.target === confirmRoot) {
+                closeConfirm(false);
+            }
+        });
+    }
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && confirmRoot && !confirmRoot.hidden) {
+            event.preventDefault();
+            closeConfirm(false);
+        }
+    });
+
+    document.addEventListener('focusin', function (event) {
+        if (event.target && event.target.matches && event.target.matches('select[name="status"], select[name="member_role"]')) {
+            event.target.setAttribute('data-prev', event.target.value);
+        }
+    });
+
+    document.addEventListener('submit', function (event) {
+        var form = event.target;
+        if (!form || !form.getAttribute) {
+            return;
+        }
+        var submitter = event.submitter || null;
+        var message = (submitter && submitter.getAttribute('data-confirm')) || form.getAttribute('data-confirm');
+        if (!message) {
+            return;
+        }
+        if (form.getAttribute('data-confirmed') === '1') {
+            form.removeAttribute('data-confirmed');
+            return;
+        }
+        event.preventDefault();
+        askConfirm(message).then(function (accepted) {
+            if (!accepted) {
+                form.querySelectorAll('select[name="status"], select[name="member_role"]').forEach(function (select) {
+                    if (select.getAttribute('data-prev') !== null) {
+                        select.value = select.getAttribute('data-prev');
+                        if (typeof select.wfSelectRefresh === 'function') {
+                            select.wfSelectRefresh();
+                        }
+                    }
+                });
+                return;
+            }
+            form.setAttribute('data-confirmed', '1');
+            if (typeof form.requestSubmit === 'function') {
+                form.requestSubmit(submitter && form.contains(submitter) ? submitter : undefined);
+                return;
+            }
+            form.submit();
+        });
+    });
+
+    function toggleFoldRow(row, open) {
+        var next = typeof open === 'boolean' ? open : !row.classList.contains('is-open');
+        row.classList.toggle('is-open', next);
+        var btn = row.querySelector('.wf-fold-btn');
+        if (btn) {
+            btn.setAttribute('aria-expanded', next ? 'true' : 'false');
+            btn.setAttribute('aria-label', next ? 'Hide details' : 'Show details');
+        }
+    }
+
+    function bindFoldableRows(table) {
+        Array.prototype.forEach.call(table.tBodies, function (body) {
+            Array.prototype.forEach.call(body.rows, function (row) {
+                if (row.cells.length < 2 || row.querySelector('.wf-fold-btn')) {
+                    return;
+                }
+                row.classList.add('wf-fold');
+                var first = row.cells[0];
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'wf-fold-btn';
+                btn.setAttribute('aria-expanded', 'false');
+                btn.setAttribute('aria-label', 'Show details');
+                btn.innerHTML = '<i class="bi bi-chevron-down" aria-hidden="true"></i>';
+                btn.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    toggleFoldRow(row);
+                });
+                first.appendChild(btn);
+                row.addEventListener('click', function (event) {
+                    if (!window.matchMedia('(max-width: 767.98px)').matches) {
+                        return;
+                    }
+                    if (event.target.closest('a, button, input, select, textarea, label, form')) {
+                        return;
+                    }
+                    toggleFoldRow(row);
+                });
+            });
+        });
+    }
+
+    function bindClickableRows(table) {
+        Array.prototype.forEach.call(table.tBodies, function (body) {
+            Array.prototype.forEach.call(body.rows, function (row) {
+                var link = null;
+                Array.prototype.forEach.call(row.querySelectorAll('a[href]'), function (candidate) {
+                    if (!link && !candidate.closest('form') && !candidate.classList.contains('wf-fold-btn')) {
+                        link = candidate;
+                    }
+                });
+                if (!link) {
+                    return;
+                }
+                row.classList.add('is-clickable');
+                row.tabIndex = 0;
+                function openRow(event) {
+                    if (event.target.closest('a, button, input, select, textarea, label, form')) {
+                        return;
+                    }
+                    if (table.classList.contains('wf-stack') && window.matchMedia('(max-width: 767.98px)').matches) {
+                        return;
+                    }
+                    if (event.type === 'keydown' && event.key !== 'Enter' && event.key !== ' ') {
+                        return;
+                    }
+                    if (event.type === 'keydown') {
+                        event.preventDefault();
+                    }
+                    window.location.href = link.href;
+                }
+                row.addEventListener('click', openRow);
+                row.addEventListener('keydown', openRow);
+            });
+        });
+    }
+
+    function bindTableSort(table) {
+        var body = table.tBodies[0];
+        if (!body) {
+            return;
+        }
+        Array.prototype.forEach.call(table.tHead ? table.tHead.rows[0].cells : [], function (th, index) {
+            if (!th || th.querySelector('button, a, input, select')) {
+                return;
+            }
+            if (!((th.textContent || '').trim())) {
+                return;
+            }
+            th.classList.add('is-sortable');
+            th.tabIndex = 0;
+            function sortColumn() {
+                var asc = th.getAttribute('aria-sort') !== 'ascending';
+                Array.prototype.forEach.call(th.parentNode.cells, function (cell) {
+                    cell.removeAttribute('aria-sort');
+                });
+                th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+                var rows = Array.prototype.slice.call(body.rows);
+                rows.sort(function (a, b) {
+                    return compareCells(cellValue(a, index), cellValue(b, index), asc);
+                });
+                rows.forEach(function (row) {
+                    body.appendChild(row);
+                });
+            }
+            th.addEventListener('click', sortColumn);
+            th.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    sortColumn();
+                }
+            });
+        });
+    }
+
+    function cellValue(row, index) {
+        var cell = row.cells[index];
+        if (!cell) {
+            return '';
+        }
+        var marked = cell.querySelector('[data-sort]');
+        return (marked ? marked.getAttribute('data-sort') : cell.textContent || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function compareCells(a, b, asc) {
+        var an = parseSortNumber(a);
+        var bn = parseSortNumber(b);
+        var result = 0;
+        if (an !== null && bn !== null) {
+            result = an - bn;
+        } else {
+            var ad = Date.parse(a);
+            var bd = Date.parse(b);
+            if (!isNaN(ad) && !isNaN(bd) && /[a-z]/i.test(a) && /[a-z]/i.test(b)) {
+                result = ad - bd;
+            } else {
+                result = a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+            }
+        }
+        if (!asc) {
+            result = -result;
+        }
+        return result;
+    }
+
+    function parseSortNumber(value) {
+        var text = String(value).replace(/,/g, '').trim();
+        var exact = text.match(/^(?:[A-Za-z]{1,4}\s+)?(-?\d+(?:\.\d+)?)%?$/);
+        if (exact) {
+            return parseFloat(exact[1]);
+        }
+        var percent = text.match(/(-?\d+(?:\.\d+)?)%/);
+        return percent ? parseFloat(percent[1]) : null;
+    }
+
+    function toast(message, type) {
+        document.querySelectorAll('.wf-toast').forEach(function (old) {
+            old.remove();
+        });
+        var el = document.createElement('div');
+        el.className = 'wf-toast is-' + (type || 'info');
+        el.setAttribute('role', 'status');
+        el.textContent = message;
+        document.body.appendChild(el);
+        window.setTimeout(function () {
+            el.remove();
+        }, 4200);
+    }
+
+    document.querySelectorAll('.wf-check').forEach(function (button) {
+        button.addEventListener('click', function () {
+            if (button.disabled) {
+                return;
+            }
+            var done = button.classList.contains('is-done');
+            var status = done ? button.getAttribute('data-reopen') : button.getAttribute('data-complete');
+            var url = button.getAttribute('data-url');
+            var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+            var token = tokenMeta ? tokenMeta.getAttribute('content') : '';
+            if (!status || !url || !token) {
+                return;
+            }
+            askConfirm(done ? 'Are you sure you want to reopen this task?' : 'Are you sure you want to complete this task?').then(function (accepted) {
+                if (!accepted) {
+                    return;
+                }
+                runTaskCheck(button, done, status, url, token);
+            });
+        });
+    });
+
+    function runTaskCheck(button, done, status, url, token) {
+            var title = button.closest('.wf-task-main');
+            var previous = done;
+            button.disabled = true;
+            button.classList.toggle('is-done', !done);
+            button.setAttribute('aria-pressed', done ? 'false' : 'true');
+            if (title) {
+                title.classList.toggle('is-done', !done);
+            }
+            var body = new URLSearchParams();
+            body.set('_token', token);
+            body.set('status', status);
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: body.toString()
+            }).then(function (response) {
+                return response.json().then(function (data) {
+                    if (data.pending) {
+                        button.classList.toggle('is-done', previous);
+                        button.setAttribute('aria-pressed', previous ? 'true' : 'false');
+                        if (title) {
+                            title.classList.toggle('is-done', previous);
+                        }
+                        toast(data.message || 'This change is waiting for approval.', 'info');
+                        return;
+                    }
+                    if (!response.ok || !data.ok) {
+                        button.classList.toggle('is-done', previous);
+                        button.setAttribute('aria-pressed', previous ? 'true' : 'false');
+                        if (title) {
+                            title.classList.toggle('is-done', previous);
+                        }
+                        toast(data.message || 'The task could not be updated.', 'error');
+                        return;
+                    }
+                    var row = button.closest('tr, .wf-kanban-card, .wf-page-header');
+                    if (row) {
+                        var badge = row.querySelector('[data-status-label] .wf-badge, [data-status-label] .badge');
+                        if (badge && data.label) {
+                            badge.textContent = data.label;
+                        }
+                        var meter = row.querySelector('[data-progress]');
+                        if (meter && typeof data.progress === 'number') {
+                            var bar = meter.querySelector('.wf-meter-track span');
+                            var value = meter.querySelector('.wf-meter-value');
+                            meter.setAttribute('data-progress', String(data.progress));
+                            meter.classList.toggle('is-done', data.progress >= 100);
+                            meter.classList.toggle('is-empty', data.progress <= 0);
+                            if (bar) {
+                                bar.style.width = data.progress + '%';
+                            }
+                            if (value) {
+                                value.textContent = data.progress + '%';
+                            }
+                        }
+                    }
+                    toast(done ? 'Task reopened.' : 'Task completed.', 'success');
+                });
+            }).catch(function () {
+                button.classList.toggle('is-done', previous);
+                button.setAttribute('aria-pressed', previous ? 'true' : 'false');
+                if (title) {
+                    title.classList.toggle('is-done', previous);
+                }
+                toast('The task could not be updated.', 'error');
+            }).then(function () {
+                button.disabled = false;
+            });
+    }
+
+    document.querySelectorAll('table').forEach(function (table) {
+        if (table.id === 'invoice-lines') {
+            return;
+        }
+        var headers = [];
+        table.querySelectorAll('thead th').forEach(function (th, index) {
+            headers[index] = (th.textContent || '').trim();
+        });
+        if (headers.length === 0) {
+            return;
+        }
+        bindTableSort(table);
+        bindClickableRows(table);
+        if (table.classList.contains('wf-keep')) {
+            return;
+        }
+        table.classList.add('wf-stack');
+        table.querySelectorAll('tbody tr').forEach(function (row) {
+            Array.prototype.forEach.call(row.children, function (cell, index) {
+                if (cell.tagName === 'TD' && headers[index] && !cell.getAttribute('data-label')) {
+                    cell.setAttribute('data-label', headers[index]);
+                }
+            });
+        });
+        bindFoldableRows(table);
+    });
+
+    document.querySelectorAll('.alert.wf-alert').forEach(function (alert) {
+        window.setTimeout(function () {
+            alert.style.transition = 'opacity .3s ease';
+            alert.style.opacity = '0';
+            window.setTimeout(function () {
+                alert.remove();
+            }, 300);
+        }, 5000);
+    });
+
+    var tokenMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrf = tokenMeta ? tokenMeta.getAttribute('content') : '';
+    document.querySelectorAll('.wf-kanban-card[draggable="true"]').forEach(function (card) {
+        card.addEventListener('dragstart', function (event) {
+            event.dataTransfer.setData('text/plain', card.getAttribute('data-task-id') || '');
+            event.dataTransfer.effectAllowed = 'move';
+        });
+    });
+
+    document.querySelectorAll('.wf-kanban-col').forEach(function (column) {
+        column.addEventListener('dragover', function (event) {
+            event.preventDefault();
+            column.classList.add('is-over');
+        });
+        column.addEventListener('dragleave', function () {
+            column.classList.remove('is-over');
+        });
+        column.addEventListener('drop', function (event) {
+            event.preventDefault();
+            column.classList.remove('is-over');
+            var taskId = event.dataTransfer.getData('text/plain');
+            var card = document.querySelector('.wf-kanban-card[data-task-id="' + taskId + '"]');
+            var status = column.getAttribute('data-status');
+            if (!card || !status || !csrf) {
+                return;
+            }
+            var current = card.querySelector('select[name="status"]');
+            if (current && current.value === status) {
+                return;
+            }
+
+            askConfirm('Are you sure you want to move this task?').then(function (accepted) {
+                if (!accepted) {
+                    return;
+                }
+                moveKanbanCard(card, column, status);
+            });
+        });
+    });
+
+    function moveKanbanCard(card, column, status) {
+            var body = new URLSearchParams();
+            body.set('_token', csrf);
+            body.set('status', status);
+            fetch(card.getAttribute('data-url'), {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: body.toString()
+            }).then(function (response) {
+                return response.json().then(function (data) {
+                    if (data.pending) {
+                        toast(data.message || 'This move is waiting for approval.', 'info');
+                        return;
+                    }
+                    if (!response.ok || !data.ok) {
+                        toast(data.message || 'The task could not be moved.', 'error');
+                        return;
+                    }
+                    var cards = column.querySelector('.wf-kanban-cards');
+                    if (cards) {
+                        cards.appendChild(card);
+                    }
+                    var select = card.querySelector('select[name="status"]');
+                    if (select) {
+                        select.value = status;
+                        if (typeof select.wfSelectRefresh === 'function') {
+                            select.wfSelectRefresh();
+                        }
+                    }
+                });
+            }).catch(function () {
+                toast('The task could not be moved.', 'error');
+            });
+    }
+
+    var projectSelect = document.getElementById('time-project');
+    var taskSelect = document.getElementById('time-task');
+    if (projectSelect && taskSelect) {
+        var filterTasks = function () {
+            var projectId = projectSelect.value;
+            var selectedStillVisible = false;
+            Array.prototype.forEach.call(taskSelect.options, function (option) {
+                if (!option.value) {
+                    option.hidden = false;
+                    return;
+                }
+                var matches = projectId !== '' && option.getAttribute('data-project') === projectId;
+                option.hidden = !matches;
+                if (matches && option.value === taskSelect.value) {
+                    selectedStillVisible = true;
+                }
+            });
+            if (!selectedStillVisible) {
+                taskSelect.value = '';
+            }
+            if (typeof taskSelect.wfSelectRefresh === 'function') {
+                taskSelect.wfSelectRefresh();
+            }
+        };
+        projectSelect.addEventListener('change', filterTasks);
+        filterTasks();
+    }
+
+    var lineTable = document.getElementById('invoice-lines');
+    var addLine = document.getElementById('invoice-add-line');
+    if (lineTable && addLine) {
+        addLine.addEventListener('click', function () {
+            var body = lineTable.querySelector('tbody');
+            var row = body ? body.querySelector('.invoice-line') : null;
+            if (!body || !row) {
+                return;
+            }
+            var copy = row.cloneNode(true);
+            copy.querySelectorAll('input').forEach(function (input) {
+                input.value = input.name.indexOf('quantities') === 0 ? '1' : '';
+            });
+            body.appendChild(copy);
+        });
+        lineTable.addEventListener('click', function (event) {
+            var button = event.target.closest ? event.target.closest('.invoice-remove') : null;
+            if (!button) {
+                return;
+            }
+            if (lineTable.querySelectorAll('.invoice-line').length < 2) {
+                return;
+            }
+            var row = button.closest('tr');
+            if (row) {
+                row.remove();
+            }
+        });
+    }
+
+    var invoiceClient = document.getElementById('invoice-client');
+    var invoiceProject = document.getElementById('invoice-project');
+    if (invoiceClient && invoiceProject) {
+        var filterInvoiceProjects = function () {
+            var clientId = invoiceClient.value;
+            Array.prototype.forEach.call(invoiceProject.options, function (option) {
+                if (!option.value) {
+                    option.hidden = false;
+                    return;
+                }
+                option.hidden = clientId !== '' && option.getAttribute('data-client') !== clientId;
+            });
+            var selected = invoiceProject.options[invoiceProject.selectedIndex];
+            if (selected && selected.hidden) {
+                invoiceProject.value = '';
+            }
+            if (typeof invoiceProject.wfSelectRefresh === 'function') {
+                invoiceProject.wfSelectRefresh();
+            }
+        };
+        invoiceClient.addEventListener('change', filterInvoiceProjects);
+        filterInvoiceProjects();
+    }
+
+    var paymentPanel = document.getElementById('invoice-payments');
+    var paymentDataNode = document.getElementById('invoice-payment-data');
+    if (paymentPanel && paymentDataNode && invoiceProject) {
+        var paymentData = {};
+        try {
+            paymentData = JSON.parse(paymentDataNode.textContent || '{}');
+        } catch (error) {}
+        var paymentEmpty = paymentPanel.querySelector('[data-payment-empty]');
+        var paymentBody = paymentPanel.querySelector('[data-payment-body]');
+        var paymentTotal = paymentPanel.querySelector('[data-payment-total]');
+        var paymentRemaining = paymentPanel.querySelector('[data-payment-remaining]');
+        var paymentHistory = paymentPanel.querySelector('[data-payment-history]');
+        var currency = paymentPanel.getAttribute('data-currency') || '';
+        function moneyLabel(amount) {
+            var number = Number(amount || 0);
+            var formatted = number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            return (currency ? currency + ' ' : '') + formatted;
+        }
+        function paintPayments() {
+            var projectId = invoiceProject.value;
+            var record = projectId ? paymentData[projectId] : null;
+            if (!record) {
+                if (paymentEmpty) {
+                    paymentEmpty.hidden = false;
+                }
+                if (paymentBody) {
+                    paymentBody.hidden = true;
+                }
+                return;
+            }
+            if (paymentEmpty) {
+                paymentEmpty.hidden = true;
+            }
+            if (paymentBody) {
+                paymentBody.hidden = false;
+            }
+            if (paymentTotal) {
+                paymentTotal.textContent = moneyLabel(record.paid);
+            }
+            if (paymentRemaining) {
+                paymentRemaining.textContent = moneyLabel(record.remaining);
+            }
+            if (paymentHistory) {
+                paymentHistory.innerHTML = '';
+                var rows = record.history || [];
+                if (!rows.length) {
+                    var empty = document.createElement('li');
+                    empty.className = 'text-muted';
+                    empty.textContent = 'No payments recorded yet.';
+                    paymentHistory.appendChild(empty);
+                    return;
+                }
+                rows.forEach(function (row) {
+                    var item = document.createElement('li');
+                    item.className = 'mb-2';
+                    var strong = document.createElement('strong');
+                    strong.textContent = 'Paid amount ' + row.amount;
+                    var meta = document.createElement('div');
+                    meta.className = 'text-muted small';
+                    meta.textContent = row.when + ' · ' + row.detail;
+                    item.appendChild(strong);
+                    item.appendChild(meta);
+                    paymentHistory.appendChild(item);
+                });
+            }
+        }
+        invoiceProject.addEventListener('change', paintPayments);
+        if (invoiceClient) {
+            invoiceClient.addEventListener('change', paintPayments);
+        }
+        paintPayments();
+    }
+
+    var planSelect = document.getElementById('subscription_plan');
+    var featureList = document.getElementById('feature-list');
+    var matchPlan = document.getElementById('feature-match-plan');
+    if (planSelect && featureList) {
+        var plans = {};
+        try {
+            plans = JSON.parse(planSelect.getAttribute('data-plans') || '{}');
+        } catch (error) {}
+        var boxes = featureList.querySelectorAll('[data-feature]');
+        function includedFeatures() {
+            return plans[planSelect.value] || [];
+        }
+        function paintFeatures() {
+            var set = includedFeatures();
+            Array.prototype.forEach.call(boxes, function (box) {
+                var tag = featureList.querySelector('[data-feature-tag="' + box.value + '"]');
+                if (!tag) {
+                    return;
+                }
+                var inPlan = set.indexOf(box.value) !== -1;
+                tag.className = 'wf-feature-tag' + (box.checked && !inPlan ? ' is-manual' : '');
+                if (box.checked && inPlan) {
+                    tag.textContent = 'In plan';
+                } else if (box.checked) {
+                    tag.textContent = 'Added manually';
+                } else if (inPlan) {
+                    tag.textContent = 'Removed from plan';
+                } else {
+                    tag.textContent = '';
+                }
+            });
+        }
+        planSelect.addEventListener('change', function () {
+            var set = includedFeatures();
+            Array.prototype.forEach.call(boxes, function (box) {
+                if (set.indexOf(box.value) !== -1) {
+                    box.checked = true;
+                }
+            });
+            paintFeatures();
+        });
+        if (matchPlan) {
+            matchPlan.addEventListener('click', function () {
+                var set = includedFeatures();
+                Array.prototype.forEach.call(boxes, function (box) {
+                    box.checked = set.indexOf(box.value) !== -1;
+                });
+                paintFeatures();
+            });
+        }
+        featureList.addEventListener('change', paintFeatures);
+        paintFeatures();
+    }
+
+    document.querySelectorAll('form.wf-filters').forEach(function (form) {
+        var search = form.querySelector('input[name="q"]');
+        var timer = null;
+        function submitFilters() {
+            window.clearTimeout(timer);
+            form.submit();
+        }
+        if (search) {
+            search.addEventListener('input', function () {
+                window.sessionStorage.setItem('wf-search-focus', '1');
+                window.clearTimeout(timer);
+                timer = window.setTimeout(submitFilters, 300);
+            });
+        }
+        form.querySelectorAll('select').forEach(function (select) {
+            select.addEventListener('change', submitFilters);
+        });
+        var clear = document.createElement('button');
+        clear.type = 'button';
+        clear.className = 'btn btn-ghost btn-sm wf-filter-clear';
+        clear.innerHTML = '<i class="bi bi-x-lg" aria-hidden="true"></i> Clear';
+        clear.addEventListener('click', function () {
+            window.sessionStorage.removeItem('wf-search-focus');
+            if (search) {
+                search.value = '';
+            }
+            form.querySelectorAll('select').forEach(function (select) {
+                select.selectedIndex = 0;
+            });
+            submitFilters();
+        });
+        form.appendChild(clear);
+    });
+    var searchFocus = document.querySelector('form.wf-filters input[name="q"]');
+    if (searchFocus && window.sessionStorage.getItem('wf-search-focus') === '1') {
+        window.sessionStorage.removeItem('wf-search-focus');
+        searchFocus.focus();
+        var caret = searchFocus.value.length;
+        if (typeof searchFocus.setSelectionRange === 'function') {
+            searchFocus.setSelectionRange(caret, caret);
+        }
+    }
+
+    document.querySelectorAll('[data-check-all]').forEach(function (master) {
+        var group = master.getAttribute('data-check-all');
+        var boxes = function () {
+            return document.querySelectorAll('[data-member-choice="' + group + '"]');
+        };
+        master.addEventListener('change', function () {
+            boxes().forEach(function (box) {
+                box.checked = master.checked;
+            });
+        });
+        boxes().forEach(function (box) {
+            box.addEventListener('change', function () {
+                var all = boxes();
+                var checked = 0;
+                all.forEach(function (item) {
+                    if (item.checked) {
+                        checked += 1;
+                    }
+                });
+                master.checked = all.length > 0 && checked === all.length;
+            });
+        });
+    });
+
+    var accessSwitch = document.getElementById('custom_permissions');
+    var accessGrid = document.getElementById('wf-access-grid');
+    var accessHint = document.getElementById('wf-access-hint');
+    var roleSelect = document.getElementById('role_id');
+    var rolePermScript = document.getElementById('wf-role-permissions');
+    var rolePermMap = {};
+    if (rolePermScript) {
+        try {
+            rolePermMap = JSON.parse(rolePermScript.textContent || '{}') || {};
+        } catch (error) {
+            rolePermMap = {};
+        }
+    }
+
+    function setAccessLocked(locked) {
+        if (!accessGrid) {
+            return;
+        }
+        accessGrid.classList.toggle('is-locked', locked);
+        accessGrid.setAttribute('aria-disabled', locked ? 'true' : 'false');
+        accessGrid.querySelectorAll('input[type="checkbox"]').forEach(function (box) {
+            box.disabled = locked;
+        });
+        if (accessHint) {
+            accessHint.textContent = locked
+                ? 'Using the selected role defaults. Turn the switch on to set money, project, and task access for this account only.'
+                : 'Only the boxes below apply to this account. Turn the switch off to use the role defaults again.';
+        }
+    }
+
+    function applyRolePermissions(roleId) {
+        if (!accessGrid) {
+            return;
+        }
+        var selected = {};
+        (rolePermMap[String(roleId)] || []).forEach(function (id) {
+            selected[String(id)] = true;
+        });
+        accessGrid.querySelectorAll('input[name="permission_ids[]"]').forEach(function (box) {
+            box.checked = !!selected[box.value];
+        });
+    }
+
+    if (accessSwitch && accessGrid) {
+        setAccessLocked(!accessSwitch.checked);
+        accessSwitch.addEventListener('change', function () {
+            setAccessLocked(!accessSwitch.checked);
+            if (!accessSwitch.checked && roleSelect) {
+                applyRolePermissions(roleSelect.value);
+            }
+        });
+    }
+
+    if (roleSelect && accessGrid) {
+        roleSelect.addEventListener('change', function () {
+            if (!accessSwitch || !accessSwitch.checked) {
+                applyRolePermissions(roleSelect.value);
+            }
+        });
+    }
+
+    document.querySelectorAll('.wf-password-toggle').forEach(function (button) {
+        var field = document.getElementById(button.getAttribute('aria-controls') || '');
+        if (!field) {
+            return;
+        }
+        button.addEventListener('click', function () {
+            var showing = field.type === 'text';
+            field.type = showing ? 'password' : 'text';
+            button.setAttribute('aria-pressed', showing ? 'false' : 'true');
+            button.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+            var icon = button.querySelector('.bi');
+            if (icon) {
+                icon.classList.toggle('bi-eye', showing);
+                icon.classList.toggle('bi-eye-slash', !showing);
+            }
+            field.focus();
+        });
+    });
+
+    if (window.location.hash && window.bootstrap) {
+        var tab = document.querySelector('[data-bs-target="' + window.location.hash + '"]');
+        if (tab) {
+            window.bootstrap.Tab.getOrCreateInstance(tab).show();
+        }
+    }
+
+    function closeSelectMenus(except) {
+        document.querySelectorAll('.wf-select.is-open').forEach(function (root) {
+            if (except && root === except) {
+                return;
+            }
+            var menu = root.querySelector('.wf-select-menu');
+            var toggle = root.querySelector('.wf-select-toggle');
+            if (menu) {
+                menu.hidden = true;
+            }
+            root.classList.remove('is-open');
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
+    function enhanceSelect(select) {
+        if (select.getAttribute('data-wf-select') === '1' || select.multiple || select.size > 1) {
+            return;
+        }
+        select.setAttribute('data-wf-select', '1');
+        select.tabIndex = -1;
+        var root = document.createElement('div');
+        root.className = 'wf-select';
+        if (select.classList.contains('form-select-sm')) {
+            root.classList.add('is-sm');
+        }
+        ['mb-1', 'mb-2', 'mb-3', 'mt-1', 'mt-2', 'mt-3', 'w-100'].forEach(function (name) {
+            if (select.classList.contains(name)) {
+                root.classList.add(name);
+            }
+        });
+        select.parentNode.insertBefore(root, select);
+        root.appendChild(select);
+
+        var toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'wf-select-toggle';
+        toggle.setAttribute('aria-haspopup', 'listbox');
+        toggle.setAttribute('aria-expanded', 'false');
+        var label = document.createElement('span');
+        label.className = 'wf-select-label';
+        toggle.appendChild(label);
+        root.appendChild(toggle);
+
+        var menu = document.createElement('div');
+        menu.className = 'wf-select-menu';
+        menu.hidden = true;
+        var search = document.createElement('input');
+        search.type = 'search';
+        search.className = 'wf-select-search';
+        search.placeholder = 'Search';
+        search.setAttribute('aria-label', 'Search');
+        search.autocomplete = 'off';
+        var list = document.createElement('div');
+        list.className = 'wf-select-list';
+        list.setAttribute('role', 'listbox');
+        menu.appendChild(search);
+        menu.appendChild(list);
+        root.appendChild(menu);
+
+        function optionText(option) {
+            return (option.textContent || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function isLocked() {
+            var fieldset = select.closest('fieldset');
+            return select.disabled || !!(fieldset && fieldset.disabled);
+        }
+
+        function paintToggle() {
+            var option = select.options[select.selectedIndex];
+            label.textContent = option ? optionText(option) : '';
+            toggle.disabled = isLocked();
+            toggle.classList.toggle('is-invalid', select.classList.contains('is-invalid'));
+            root.classList.toggle('is-disabled', toggle.disabled);
+        }
+
+        function renderList() {
+            var query = search.value.trim().toLowerCase();
+            list.innerHTML = '';
+            var count = 0;
+            var lastGroup = null;
+            Array.prototype.forEach.call(select.options, function (option) {
+                if (option.hidden) {
+                    return;
+                }
+                var text = optionText(option);
+                if (query && text.toLowerCase().indexOf(query) === -1) {
+                    return;
+                }
+                var group = option.parentElement && option.parentElement.tagName === 'OPTGROUP'
+                    ? option.parentElement.label
+                    : '';
+                if (group && group !== lastGroup) {
+                    var heading = document.createElement('div');
+                    heading.className = 'wf-select-group';
+                    heading.textContent = group;
+                    list.appendChild(heading);
+                    lastGroup = group;
+                }
+                var item = document.createElement('button');
+                item.type = 'button';
+                item.className = 'wf-select-option' + (option.selected ? ' is-selected' : '');
+                item.textContent = text || '';
+                item.tabIndex = -1;
+                item.setAttribute('role', 'option');
+                item.setAttribute('aria-selected', option.selected ? 'true' : 'false');
+                if (option.disabled) {
+                    item.disabled = true;
+                }
+                item.addEventListener('click', function () {
+                    var previous = select.selectedIndex;
+                    select.setAttribute('data-prev', select.value);
+                    select.selectedIndex = option.index;
+                    closeMenu();
+                    paintToggle();
+                    if (select.selectedIndex !== previous) {
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+                list.appendChild(item);
+                count += 1;
+            });
+            if (!count) {
+                var empty = document.createElement('div');
+                empty.className = 'wf-select-empty';
+                empty.textContent = 'No matches';
+                list.appendChild(empty);
+            }
+        }
+
+        function placeMenu() {
+            var rect = toggle.getBoundingClientRect();
+            var width = rect.width >= 160 ? rect.width : Math.max(rect.width, 200);
+            var left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+            menu.style.width = width + 'px';
+            menu.style.left = left + 'px';
+            var spaceBelow = window.innerHeight - rect.bottom;
+            if (spaceBelow < 240 && rect.top > spaceBelow) {
+                menu.style.top = 'auto';
+                menu.style.bottom = (window.innerHeight - rect.top + 4) + 'px';
+            } else {
+                menu.style.bottom = 'auto';
+                menu.style.top = (rect.bottom + 4) + 'px';
+            }
+        }
+
+        function openMenu() {
+            if (toggle.disabled) {
+                return;
+            }
+            closeSelectMenus(root);
+            search.value = '';
+            renderList();
+            menu.hidden = false;
+            root.classList.add('is-open');
+            toggle.setAttribute('aria-expanded', 'true');
+            placeMenu();
+            search.focus();
+        }
+
+        function closeMenu() {
+            menu.hidden = true;
+            root.classList.remove('is-open');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        toggle.addEventListener('click', function () {
+            if (menu.hidden) {
+                openMenu();
+            } else {
+                closeMenu();
+            }
+        });
+        search.addEventListener('input', renderList);
+        search.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                var match = list.querySelector('.wf-select-option:not(:disabled)');
+                if (match) {
+                    match.click();
+                }
+            } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                var first = list.querySelector('.wf-select-option:not(:disabled)');
+                if (first) {
+                    first.focus();
+                }
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                closeMenu();
+                toggle.focus();
+            }
+        });
+        list.addEventListener('keydown', function (event) {
+            var buttons = Array.prototype.slice.call(list.querySelectorAll('.wf-select-option:not(:disabled)'));
+            var index = buttons.indexOf(document.activeElement);
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                var next = buttons[index + 1] || buttons[0];
+                if (next) {
+                    next.focus();
+                }
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                if (index <= 0) {
+                    search.focus();
+                } else {
+                    buttons[index - 1].focus();
+                }
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                closeMenu();
+                toggle.focus();
+            }
+        });
+        select.addEventListener('change', paintToggle);
+        select.addEventListener('focus', function () {
+            if (!menu.hidden) {
+                return;
+            }
+            openMenu();
+        });
+        select.addEventListener('invalid', function () {
+            openMenu();
+        });
+        select.wfSelectRefresh = function () {
+            paintToggle();
+            if (!menu.hidden) {
+                renderList();
+            }
+        };
+
+        var fieldset = select.closest('fieldset');
+        if (window.MutationObserver) {
+            if (fieldset) {
+                new MutationObserver(paintToggle).observe(fieldset, { attributes: true, attributeFilter: ['disabled'] });
+            }
+            new MutationObserver(function () {
+                paintToggle();
+                if (!menu.hidden) {
+                    renderList();
+                }
+            }).observe(select, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'disabled', 'label', 'class'] });
+        }
+
+        paintToggle();
+    }
+
+    document.querySelectorAll('select.form-select').forEach(enhanceSelect);
+    document.addEventListener('click', function (event) {
+        document.querySelectorAll('.wf-select.is-open').forEach(function (root) {
+            if (!root.contains(event.target)) {
+                var menu = root.querySelector('.wf-select-menu');
+                var toggle = root.querySelector('.wf-select-toggle');
+                if (menu) {
+                    menu.hidden = true;
+                }
+                root.classList.remove('is-open');
+                if (toggle) {
+                    toggle.setAttribute('aria-expanded', 'false');
+                }
+            }
+        });
+    });
+    window.addEventListener('resize', function () {
+        closeSelectMenus(null);
+    });
+    window.addEventListener('scroll', function () {
+        closeSelectMenus(null);
+    }, true);
+})();

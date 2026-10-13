@@ -1,0 +1,40 @@
+CREATE TABLE IF NOT EXISTS content_grids (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    organization_id BIGINT UNSIGNED NOT NULL,
+    client_id BIGINT UNSIGNED NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    notes VARCHAR(255) NULL,
+    created_by BIGINT UNSIGNED NULL,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    INDEX idx_content_grids_org (organization_id),
+    INDEX idx_content_grids_client (client_id),
+    INDEX idx_content_grids_dates (start_date, end_date),
+    CONSTRAINT fk_content_grids_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_content_grids_client FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    CONSTRAINT fk_content_grids_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS content_grid_days (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    content_grid_id BIGINT UNSIGNED NOT NULL,
+    week_number TINYINT UNSIGNED NOT NULL,
+    day_of_week TINYINT UNSIGNED NOT NULL,
+    post_type VARCHAR(80) NOT NULL DEFAULT 'Reel',
+    post_time VARCHAR(40) NOT NULL DEFAULT '10:00 AM',
+    platform_facebook TINYINT(1) NOT NULL DEFAULT 0,
+    platform_instagram TINYINT(1) NOT NULL DEFAULT 0,
+    platform_tiktok TINYINT(1) NOT NULL DEFAULT 0,
+    platform_whatsapp TINYINT(1) NOT NULL DEFAULT 0,
+    platform_telegram TINYINT(1) NOT NULL DEFAULT 0,
+    platform_linkedin TINYINT(1) NOT NULL DEFAULT 0,
+    platform_x TINYINT(1) NOT NULL DEFAULT 0,
+    is_edited TINYINT(1) NOT NULL DEFAULT 0,
+    is_posted TINYINT(1) NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    UNIQUE KEY uq_content_grid_day (content_grid_id, week_number, day_of_week),
+    INDEX idx_content_grid_days_grid (content_grid_id),
+    CONSTRAINT fk_content_grid_days_grid FOREIGN KEY (content_grid_id) REFERENCES content_grids(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

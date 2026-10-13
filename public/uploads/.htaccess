@@ -1,0 +1,6 @@
+Options -Indexes
+php_flag engine off
+
+<FilesMatch "\.(php|phtml|phar|cgi|pl|exe|shtml)$">
+    Require all denied
+</FilesMatch>

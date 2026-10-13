@@ -1,0 +1,30 @@
+---
+description: Always update Roles/permissions when product functionality changes
+alwaysApply: true
+---
+
+# Keep Roles in sync with features
+
+Whenever you add, change, or remove app functionality (pages, modules, actions, routes), **also update the Roles & permissions system** so `/roles` stays accurate.
+
+## Required checklist
+
+1. **Permissions** — Add/update permission slugs in the relevant `Phase*Setup::seedPermissions()` (name + `group_name` + slug). If a permission already exists, **UPDATE its `name`/`group_name`** so the Roles UI reflects the new wording.
+2. **Role maps** — Assign the new slugs to the right role slugs (`owner`, `admin`, `general_manager`, `operations_manager`, `sales`, `social_media_manager`, etc.).
+3. **Role descriptions** — Update `ORG_ROLES` / role `description` text when a role’s job changes (e.g. Social Media Manager + content grids).
+4. **Installer / Roles UI** — Ensure new phase seed runs from `InstallerService`, and wire it into `PermissionCatalog::sync()` (used by `RoleController`) so `/roles` stays current.
+5. **Feature flag** — If gated, update `FeatureService` catalog + plan defaults.
+6. **Verify** — Confirm `/roles` and role detail/edit show the new Workflow (or feature) group and chips.
+
+## Workflow / shared tasks example (current)
+
+- Ops `/tasks` and Workflow tasks share the **`tasks`** table (optional `work_flow_role_id`, `booking_id`)
+- Bookings include Quick-Start Checklist and can create a linked shared task
+- `work_flow.view` — hub and shared tasks  
+- `work_flow.assign` — create/assign tasks + view/edit monthly content grids  
+- `work_flow.manage` — manage pipeline roles, tasks, and delete content grids  
+- `bookings.*` — booking + checklist  
+- `bookings.submit` / `bookings.approve` — checklist sent to CEO (GM) or Production/Ops Manager  
+- `inventory.view` / `inventory.manage` — owned & rental equipment catalog  
+
+Do **not** ship a feature that users cannot grant via Roles.

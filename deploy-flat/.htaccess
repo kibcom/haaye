@@ -1,0 +1,23 @@
+Options +FollowSymLinks -MultiViews -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # Keep app source folders private
+    RewriteRule ^(app|config|database|routes|storage)/ - [F,L]
+
+    # Existing files (css, js, images) load as normal files
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteRule ^ - [L]
+
+    # Every other path goes to the app (login, projects, etc.)
+    RewriteRule ^ index.php [L]
+</IfModule>
+
+ErrorDocument 404 /index.php
+
+<FilesMatch "^\.env">
+    Require all denied
+</FilesMatch>
